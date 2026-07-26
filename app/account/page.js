@@ -58,7 +58,7 @@ export default async function AccountDashboard({ searchParams }) {
 
   const { data: myRequests } = await supabase
     .from("service_requests")
-    .select("*, landscapers(business_name, phone)")
+    .select("*, landscapers(business_name, phone, email)")
     .eq("client_id", userId)
     .order("created_at", { ascending: false });
 
@@ -151,7 +151,8 @@ export default async function AccountDashboard({ searchParams }) {
                     <td className="px-4 py-2">
                       {req.landscapers?.business_name}
                       <div className="text-xs text-black">
-                        {req.landscapers?.phone}
+                        {req.landscapers?.phone} &middot;{" "}
+                        {req.landscapers?.email}
                       </div>
                     </td>
                     <td className="px-4 py-2">{req.service}</td>
@@ -198,7 +199,9 @@ export default async function AccountDashboard({ searchParams }) {
                   <p className="text-sm text-black">
                     {landscaper.services}
                   </p>
-                  <p className="text-sm text-black">{landscaper.phone}</p>
+                  <p className="text-sm text-black">
+                    {landscaper.phone} &middot; {landscaper.email}
+                  </p>
                   {landscaper.contact_hours && (
                     <p className="text-sm text-black">
                       Best hours to reach them: {landscaper.contact_hours}

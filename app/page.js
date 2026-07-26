@@ -1,5 +1,5 @@
 import { submitLead } from "@/app/actions";
-import { SERVICES } from "@/app/lib/services";
+import { SERVICES, BUDGET_RANGES, TIMELINES } from "@/app/lib/services";
 import PhoneInput from "@/app/components/PhoneInput";
 
 const ERROR_MESSAGES = {
@@ -62,6 +62,19 @@ export default async function Home({ searchParams }) {
           </div>
 
           <div className="flex flex-col gap-1">
+            <label htmlFor="email" className="text-sm font-medium text-zinc-900">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label htmlFor="address" className="text-sm font-medium text-zinc-900">
               Address
             </label>
@@ -95,6 +108,50 @@ export default async function Home({ searchParams }) {
               {SERVICES.map((service) => (
                 <option key={service} value={service}>
                   {service}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="budget_range" className="text-sm font-medium text-zinc-900">
+              Budget Range
+            </label>
+            <select
+              id="budget_range"
+              name="budget_range"
+              required
+              defaultValue=""
+              className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
+            >
+              <option value="" disabled>
+                Select a budget range
+              </option>
+              {BUDGET_RANGES.map((range) => (
+                <option key={range} value={range}>
+                  {range}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="timeline" className="text-sm font-medium text-zinc-900">
+              Timeline
+            </label>
+            <select
+              id="timeline"
+              name="timeline"
+              required
+              defaultValue=""
+              className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
+            >
+              <option value="" disabled>
+                Select a timeline
+              </option>
+              {TIMELINES.map((timeline) => (
+                <option key={timeline} value={timeline}>
+                  {timeline}
                 </option>
               ))}
             </select>

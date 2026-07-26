@@ -6,7 +6,9 @@ import { computeLeadPrice } from "@/lib/pricing";
 import { resolveActingUser, canWriteWhileImpersonating } from "@/lib/impersonation";
 import { abbreviateName } from "@/lib/name";
 import { cityOnly } from "@/lib/address";
-import { logout, updateRequestStatus, buyLead, stopImpersonation } from "./actions";
+import { logout, updateRequestStatus, stopImpersonation } from "./actions";
+import BuyLeadForm from "./BuyLeadForm";
+import ScrollRestore from "./ScrollRestore";
 
 const REQUEST_STATUSES = ["pending", "contacted", "completed", "declined"];
 
@@ -43,7 +45,7 @@ export default async function LandscaperDashboard({ searchParams }) {
 
   const { data: requests, error: requestsError } = await supabase
     .from("service_requests")
-    .select("*, client_profiles(name, phone, address, lat, lng)")
+    .select("*, client_profiles(name, phone, email, address, lat, lng)")
     .eq("landscaper_id", userId)
     .order("created_at", { ascending: false });
 
@@ -75,8 +77,11 @@ export default async function LandscaperDashboard({ searchParams }) {
     sourceId: match.lead_id,
     name: match.lead_name,
     phone: match.lead_phone,
+    email: match.lead_email,
     address: match.lead_address,
     service: match.lead_service,
+    budgetRange: match.lead_budget_range,
+    timeline: match.lead_timeline,
     distance: match.distance_miles,
     price: computeLeadPrice(match.distance_miles),
     purchased: purchasedLeadIds.has(match.lead_id),
@@ -97,8 +102,11 @@ export default async function LandscaperDashboard({ searchParams }) {
       sourceId: client.id,
       name: client.name,
       phone: client.phone,
+      email: client.email,
       address: client.address,
       service: null,
+      budgetRange: null,
+      timeline: null,
       distance: client.distance,
       price: computeLeadPrice(client.distance),
       purchased: purchasedClientIds.has(client.id),
@@ -114,6 +122,7 @@ export default async function LandscaperDashboard({ searchParams }) {
 
   return (
     <main className="flex flex-1 flex-col bg-zinc-50 px-6 py-10">
+      <ScrollRestore />
       {isImpersonating && (
         <div className="mx-auto mb-4 flex w-full max-w-4xl flex-wrap items-center justify-between gap-2 rounded-md bg-zinc-900 px-4 py-3 text-sm text-white">
           <span>
@@ -209,6 +218,7 @@ export default async function LandscaperDashboard({ searchParams }) {
                     {requestPurchased ? (
                       <p className="text-sm text-black">
                         {req.client_profiles?.phone} &middot;{" "}
+                        {req.client_profiles?.email} &middot;{" "}
                         {req.client_profiles?.address}
                       </p>
                     ) : (
@@ -217,24 +227,12 @@ export default async function LandscaperDashboard({ searchParams }) {
                           A client has shown interest in your services, buy
                           now!
                         </p>
-                        <form action={buyLead}>
-                          <input
-                            type="hidden"
-                            name="source_type"
-                            value="client_profile"
-                          />
-                          <input
-                            type="hidden"
-                            name="source_id"
-                            value={req.client_id}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-800"
-                          >
-                            Buy Lead — ${requestPrice.toFixed(2)}
-                          </button>
-                        </form>
+                        <BuyLeadForm
+                          sourceType="client_profile"
+                          sourceId={req.client_id}
+                        >
+                          Buy Lead — ${requestPrice.toFixed(2)}
+                        </BuyLeadForm>
                       </div>
                     )}
 
@@ -282,7 +280,8 @@ export default async function LandscaperDashboard({ searchParams }) {
         <h2 className="text-lg font-bold text-black">Clients Near You</h2>
         <p className="text-sm text-black">
           Within your {profile.service_radius_miles} mi radius of{" "}
-          {profile.address}. Price scales with distance, from $4.99 to $9.99.
+          {profile.address}. Price scales with distance, $9.99 down to $4.99
+          for 10 miles away or more.
         </p>
 
         {bought === "1" && (
@@ -318,6 +317,7 @@ export default async function LandscaperDashboard({ searchParams }) {
                 <tr className="border-b border-zinc-200 text-left text-black">
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2">Service</th>
+                  <th className="px-4 py-2">Budget / Timeline</th>
                   <th className="px-4 py-2">Address</th>
                   <th className="px-4 py-2">Distance</th>
                   <th className="px-4 py-2">Price</th>
@@ -337,6 +337,11 @@ export default async function LandscaperDashboard({ searchParams }) {
                     </td>
                     <td className="px-4 py-2">{item.service ?? "—"}</td>
                     <td className="px-4 py-2">
+                      {item.budgetRange || item.timeline
+                        ? `${item.budgetRange ?? "—"} · ${item.timeline ?? "—"}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2">
                       {item.purchased
                         ? item.address
                         : cityOnly(item.address)}
@@ -352,27 +357,15 @@ export default async function LandscaperDashboard({ searchParams }) {
                     <td className="px-4 py-2">
                       {item.purchased ? (
                         <span className="text-xs font-medium text-black">
-                          {item.phone}
+                          {item.phone} &middot; {item.email}
                         </span>
                       ) : (
-                        <form action={buyLead}>
-                          <input
-                            type="hidden"
-                            name="source_type"
-                            value={item.sourceType}
-                          />
-                          <input
-                            type="hidden"
-                            name="source_id"
-                            value={item.sourceId}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-800"
-                          >
-                            Buy Lead
-                          </button>
-                        </form>
+                        <BuyLeadForm
+                          sourceType={item.sourceType}
+                          sourceId={item.sourceId}
+                        >
+                          Buy Lead
+                        </BuyLeadForm>
                       )}
                     </td>
                   </tr>

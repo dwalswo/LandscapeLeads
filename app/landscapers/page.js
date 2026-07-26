@@ -84,12 +84,13 @@ export default async function Landscapers({ searchParams }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm font-medium text-zinc-900">
-              Email (optional)
+              Email
             </label>
             <input
               id="email"
               name="email"
               type="email"
+              required
               className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
             />
           </div>
@@ -120,6 +121,7 @@ export default async function Landscapers({ searchParams }) {
               name="service_radius_miles"
               type="number"
               min="1"
+              required
               defaultValue={10}
               className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
             />
@@ -130,12 +132,13 @@ export default async function Landscapers({ searchParams }) {
               htmlFor="contact_hours"
               className="text-sm font-medium text-zinc-900"
             >
-              Best Hours for Clients to Reach You (optional)
+              Best Hours for Clients to Reach You
             </label>
             <input
               id="contact_hours"
               name="contact_hours"
               type="text"
+              required
               placeholder="e.g. Mon-Fri 9am-5pm"
               className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 placeholder:text-zinc-700 focus:border-green-600 focus:outline-none"
             />

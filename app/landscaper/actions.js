@@ -74,16 +74,24 @@ export async function saveProfile(formData) {
   const businessName = formData.get('business_name')?.toString().trim()
   const contactName = formData.get('contact_name')?.toString().trim()
   const phone = formData.get('phone')?.toString().trim()
-  const email = formData.get('email')?.toString().trim() || null
+  const email = formData.get('email')?.toString().trim()
   const address = formData.get('address')?.toString().trim()
   const serviceRadius = Number(formData.get('service_radius_miles')) || 10
-  const contactHours = formData.get('contact_hours')?.toString().trim() || null
+  const contactHours = formData.get('contact_hours')?.toString().trim()
   const services = formData
     .getAll('services')
     .map((s) => s.toString())
     .join(', ')
 
-  if (!businessName || !contactName || !phone || !address || !services) {
+  if (
+    !businessName ||
+    !contactName ||
+    !phone ||
+    !email ||
+    !address ||
+    !contactHours ||
+    !services
+  ) {
     redirect('/landscaper/complete-profile?error=missing_fields')
   }
 

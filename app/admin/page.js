@@ -43,6 +43,7 @@ function groupMatchesByLeadId(rows) {
       businessName: row.business_name,
       contactName: row.contact_name,
       phone: row.landscaper_phone,
+      email: row.landscaper_email,
       services: row.landscaper_services,
       distance: row.distance_miles,
       withinRadius: row.within_radius,
@@ -166,7 +167,7 @@ export default async function AdminDashboard({ searchParams }) {
 
     if (term) {
       query = query.or(
-        `name.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%,service.ilike.%${term}%`
+        `name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%,service.ilike.%${term}%`
       );
     }
 
@@ -192,7 +193,7 @@ export default async function AdminDashboard({ searchParams }) {
 
     if (term) {
       query = query.or(
-        `business_name.ilike.%${term}%,contact_name.ilike.%${term}%,address.ilike.%${term}%,services.ilike.%${term}%`
+        `business_name.ilike.%${term}%,contact_name.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%,services.ilike.%${term}%`
       );
     }
 
@@ -208,7 +209,9 @@ export default async function AdminDashboard({ searchParams }) {
       .range(from, to);
 
     if (term) {
-      query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%`);
+      query = query.or(
+        `name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%`
+      );
     }
 
     const { data, count, error } = await query;
@@ -219,7 +222,7 @@ export default async function AdminDashboard({ searchParams }) {
     let query = supabase
       .from("service_requests")
       .select(
-        "*, client_profiles(name, phone, address), landscapers(business_name, phone, contact_hours)",
+        "*, client_profiles(name, phone, email, address), landscapers(business_name, phone, email, contact_hours)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false })
@@ -237,7 +240,7 @@ export default async function AdminDashboard({ searchParams }) {
     const { data, count, error } = await supabase
       .from("lead_purchases")
       .select(
-        "*, landscapers(business_name, phone), leads(name, phone, address, service), client_profiles(name, phone, address)",
+        "*, landscapers(business_name, phone, email), leads(name, phone, email, address, service), client_profiles(name, phone, email, address)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false })
@@ -252,9 +255,9 @@ export default async function AdminDashboard({ searchParams }) {
   const page = Math.min(requestedPage, totalPages);
 
   const searchPlaceholder = {
-    clients: "Search clients by name, phone, address, or service",
-    landscapers: "Search landscapers by business, contact, address, or services",
-    accounts: "Search client accounts by name, phone, or address",
+    clients: "Search clients by name, phone, email, address, or service",
+    landscapers: "Search landscapers by business, contact, email, address, or services",
+    accounts: "Search client accounts by name, phone, email, or address",
     requests: "Search requests by service",
     purchases: null,
   }[tab];
@@ -333,7 +336,11 @@ export default async function AdminDashboard({ searchParams }) {
                         </span>
                       </p>
                       <p className="text-sm text-black">
-                        {lead.phone} &middot; {lead.address}
+                        {lead.phone} &middot; {lead.email} &middot;{" "}
+                        {lead.address}
+                      </p>
+                      <p className="text-sm text-black">
+                        {lead.budget_range} &middot; {lead.timeline}
                       </p>
                       <p className="text-xs text-black">
                         Submitted{" "}
@@ -380,6 +387,7 @@ export default async function AdminDashboard({ searchParams }) {
                           <tr className="border-b border-zinc-200 text-left text-black">
                             <th className="py-1 pr-3">Business</th>
                             <th className="py-1 pr-3">Phone</th>
+                            <th className="py-1 pr-3">Email</th>
                             <th className="py-1 pr-3">Services</th>
                             <th className="py-1 pr-3">Distance</th>
                             <th className="py-1 pr-3">In Radius?</th>
@@ -398,6 +406,7 @@ export default async function AdminDashboard({ searchParams }) {
                                 </div>
                               </td>
                               <td className="py-1.5 pr-3">{match.phone}</td>
+                              <td className="py-1.5 pr-3">{match.email}</td>
                               <td className="py-1.5 pr-3">
                                 {match.services}
                               </td>
@@ -497,6 +506,7 @@ export default async function AdminDashboard({ searchParams }) {
                   <tr className="border-b border-zinc-200 text-left text-black">
                     <th className="px-4 py-2">Name</th>
                     <th className="px-4 py-2">Phone</th>
+                    <th className="px-4 py-2">Email</th>
                     <th className="px-4 py-2">Address</th>
                     <th className="px-4 py-2">Signed Up</th>
                     <th className="px-4 py-2"></th>
@@ -510,6 +520,7 @@ export default async function AdminDashboard({ searchParams }) {
                     >
                       <td className="px-4 py-2">{client.name}</td>
                       <td className="px-4 py-2">{client.phone}</td>
+                      <td className="px-4 py-2">{client.email}</td>
                       <td className="px-4 py-2">{client.address}</td>
                       <td className="px-4 py-2">
                         {new Date(client.created_at).toLocaleDateString()}
@@ -551,13 +562,15 @@ export default async function AdminDashboard({ searchParams }) {
                         {req.client_profiles?.name}
                         <div className="text-xs text-black">
                           {req.client_profiles?.phone} &middot;{" "}
+                          {req.client_profiles?.email} &middot;{" "}
                           {req.client_profiles?.address}
                         </div>
                       </td>
                       <td className="px-4 py-2">
                         {req.landscapers?.business_name}
                         <div className="text-xs text-black">
-                          {req.landscapers?.phone}
+                          {req.landscapers?.phone} &middot;{" "}
+                          {req.landscapers?.email}
                           {req.landscapers?.contact_hours
                             ? ` · ${req.landscapers.contact_hours}`
                             : ""}
@@ -632,7 +645,8 @@ export default async function AdminDashboard({ searchParams }) {
                         <td className="px-4 py-2">
                           {purchase.landscapers?.business_name}
                           <div className="text-xs text-black">
-                            {purchase.landscapers?.phone}
+                            {purchase.landscapers?.phone} &middot;{" "}
+                            {purchase.landscapers?.email}
                           </div>
                         </td>
                         <td className="px-4 py-2 capitalize">
@@ -641,7 +655,8 @@ export default async function AdminDashboard({ searchParams }) {
                         <td className="px-4 py-2">
                           {source?.name}
                           <div className="text-xs text-black">
-                            {source?.phone} &middot; {source?.address}
+                            {source?.phone} &middot; {source?.email} &middot;{" "}
+                            {source?.address}
                           </div>
                         </td>
                         <td className="px-4 py-2">

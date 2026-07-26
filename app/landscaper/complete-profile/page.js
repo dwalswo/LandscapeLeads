@@ -120,12 +120,13 @@ export default async function LandscaperCompleteProfile({ searchParams }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm font-medium text-black">
-              Public Email (optional)
+              Public Email
             </label>
             <input
               id="email"
               name="email"
               type="email"
+              required
               defaultValue={profile?.email ?? ""}
               className="rounded-md border border-zinc-300 px-3 py-2 text-black focus:border-green-600 focus:outline-none"
             />
@@ -167,6 +168,7 @@ export default async function LandscaperCompleteProfile({ searchParams }) {
               name="service_radius_miles"
               type="number"
               min="1"
+              required
               defaultValue={profile?.service_radius_miles ?? 10}
               className="rounded-md border border-zinc-300 px-3 py-2 text-black focus:border-green-600 focus:outline-none"
             />
@@ -177,12 +179,13 @@ export default async function LandscaperCompleteProfile({ searchParams }) {
               htmlFor="contact_hours"
               className="text-sm font-medium text-black"
             >
-              Best Hours for Clients to Reach You (optional)
+              Best Hours for Clients to Reach You
             </label>
             <input
               id="contact_hours"
               name="contact_hours"
               type="text"
+              required
               placeholder="e.g. Mon-Fri 9am-5pm"
               defaultValue={profile?.contact_hours ?? ""}
               className="rounded-md border border-zinc-300 px-3 py-2 text-black placeholder:text-zinc-700 focus:border-green-600 focus:outline-none"

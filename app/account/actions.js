@@ -92,6 +92,17 @@ export async function completeProfile(formData) {
 
   const { lat, lng } = await geocodeAddress(address)
 
+  // The client's email is already required and verified at account signup
+  // (Supabase Auth) -- pull it from their own session rather than asking
+  // again. While impersonating, the session belongs to the admin, not the
+  // target client, so the email column is left untouched instead of being
+  // overwritten with the admin's own address.
+  let email
+  if (!isImpersonating) {
+    const { data: userData } = await supabase.auth.getUser()
+    email = userData?.user?.email ?? null
+  }
+
   const { error } = await supabase.from('client_profiles').upsert({
     id: userId,
     name,
@@ -99,6 +110,7 @@ export async function completeProfile(formData) {
     address,
     lat,
     lng,
+    ...(email !== undefined && { email }),
   })
 
   if (error) {

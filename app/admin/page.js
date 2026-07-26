@@ -1,10 +1,32 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { logout, updateLeadStatus } from "./actions";
+import {
+  logout,
+  updateLeadStatus,
+  updateRequestStatus,
+  startImpersonation,
+} from "./actions";
 
-const STATUSES = ["new", "contacted", "matched", "closed"];
+const LEAD_STATUSES = ["new", "contacted", "matched", "closed"];
+const REQUEST_STATUSES = ["pending", "contacted", "completed", "declined"];
 const PAGE_SIZE = 10;
+const TABS = ["clients", "landscapers", "accounts", "requests", "purchases"];
+
+function LogInAsButton({ targetId, role }) {
+  return (
+    <form action={startImpersonation}>
+      <input type="hidden" name="target_id" value={targetId} />
+      <input type="hidden" name="role" value={role} />
+      <button
+        type="submit"
+        className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-black hover:bg-zinc-100"
+      >
+        Log in as
+      </button>
+    </form>
+  );
+}
 
 function sanitizeSearchTerm(term) {
   return term.replace(/[,()]/g, "").trim();
@@ -112,7 +134,11 @@ export default async function AdminDashboard({ searchParams }) {
   }
 
   const params = await searchParams;
-  const tab = params.tab === "landscapers" ? "landscapers" : "clients";
+  const impersonationError =
+    params.error === "no_profile"
+      ? "That user doesn't have a profile to preview."
+      : null;
+  const tab = TABS.includes(params.tab) ? params.tab : "clients";
   const qRaw = Array.isArray(params.q) ? params.q[0] : params.q;
   const q = (qRaw ?? "").toString();
   const term = sanitizeSearchTerm(q);
@@ -125,6 +151,9 @@ export default async function AdminDashboard({ searchParams }) {
   let leads = [];
   let leadMatches = new Map();
   let landscapers = [];
+  let clientAccounts = [];
+  let requests = [];
+  let purchases = [];
   let totalCount = 0;
   let loadError = null;
 
@@ -137,7 +166,7 @@ export default async function AdminDashboard({ searchParams }) {
 
     if (term) {
       query = query.or(
-        `name.ilike.%${term}%,phone.ilike.%${term}%,zip.ilike.%${term}%,service.ilike.%${term}%`
+        `name.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%,service.ilike.%${term}%`
       );
     }
 
@@ -154,7 +183,7 @@ export default async function AdminDashboard({ searchParams }) {
         .in("lead_id", leadIds);
       leadMatches = groupMatchesByLeadId(matchRows ?? []);
     }
-  } else {
+  } else if (tab === "landscapers") {
     let query = supabase
       .from("landscapers")
       .select("*", { count: "exact" })
@@ -163,7 +192,7 @@ export default async function AdminDashboard({ searchParams }) {
 
     if (term) {
       query = query.or(
-        `business_name.ilike.%${term}%,contact_name.ilike.%${term}%,zip.ilike.%${term}%,services.ilike.%${term}%`
+        `business_name.ilike.%${term}%,contact_name.ilike.%${term}%,address.ilike.%${term}%,services.ilike.%${term}%`
       );
     }
 
@@ -171,10 +200,64 @@ export default async function AdminDashboard({ searchParams }) {
     landscapers = data ?? [];
     totalCount = count ?? 0;
     loadError = error;
+  } else if (tab === "accounts") {
+    let query = supabase
+      .from("client_profiles")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (term) {
+      query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%,address.ilike.%${term}%`);
+    }
+
+    const { data, count, error } = await query;
+    clientAccounts = data ?? [];
+    totalCount = count ?? 0;
+    loadError = error;
+  } else if (tab === "requests") {
+    let query = supabase
+      .from("service_requests")
+      .select(
+        "*, client_profiles(name, phone, address), landscapers(business_name, phone, contact_hours)",
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (term) {
+      query = query.ilike("service", `%${term}%`);
+    }
+
+    const { data, count, error } = await query;
+    requests = data ?? [];
+    totalCount = count ?? 0;
+    loadError = error;
+  } else {
+    const { data, count, error } = await supabase
+      .from("lead_purchases")
+      .select(
+        "*, landscapers(business_name, phone), leads(name, phone, address, service), client_profiles(name, phone, address)",
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    purchases = data ?? [];
+    totalCount = count ?? 0;
+    loadError = error;
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
+
+  const searchPlaceholder = {
+    clients: "Search clients by name, phone, address, or service",
+    landscapers: "Search landscapers by business, contact, address, or services",
+    accounts: "Search client accounts by name, phone, or address",
+    requests: "Search requests by service",
+    purchases: null,
+  }[tab];
 
   return (
     <main className="flex flex-1 flex-col bg-zinc-50 px-6 py-10">
@@ -190,39 +273,32 @@ export default async function AdminDashboard({ searchParams }) {
         </form>
       </div>
 
+      {impersonationError && (
+        <div className="mx-auto mt-4 w-full max-w-4xl rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+          {impersonationError}
+        </div>
+      )}
+
       <div className="mx-auto mt-6 flex w-full max-w-4xl gap-2 border-b border-zinc-200">
-        <Link
-          href="/admin?tab=clients"
-          className={`px-4 py-2 text-sm font-medium ${
-            tab === "clients"
-              ? "border-b-2 border-green-700 text-black"
-              : "text-black hover:text-green-700"
-          }`}
-        >
-          Clients
-        </Link>
-        <Link
-          href="/admin?tab=landscapers"
-          className={`px-4 py-2 text-sm font-medium ${
-            tab === "landscapers"
-              ? "border-b-2 border-green-700 text-black"
-              : "text-black hover:text-green-700"
-          }`}
-        >
-          Landscapers
-        </Link>
+        {TABS.map((t) => (
+          <Link
+            key={t}
+            href={`/admin?tab=${t}`}
+            className={`px-4 py-2 text-sm font-medium capitalize ${
+              tab === t
+                ? "border-b-2 border-green-700 text-black"
+                : "text-black hover:text-green-700"
+            }`}
+          >
+            {t}
+          </Link>
+        ))}
       </div>
 
       <div className="mx-auto mt-6 w-full max-w-4xl">
-        <SearchForm
-          tab={tab}
-          q={q}
-          placeholder={
-            tab === "clients"
-              ? "Search clients by name, phone, zip, or service"
-              : "Search landscapers by business, contact, zip, or services"
-          }
-        />
+        {tab !== "purchases" && (
+          <SearchForm tab={tab} q={q} placeholder={searchPlaceholder} />
+        )}
 
         <p className="mt-2 text-xs text-black">
           {totalCount} result{totalCount === 1 ? "" : "s"}
@@ -235,7 +311,7 @@ export default async function AdminDashboard({ searchParams }) {
           </p>
         )}
 
-        {tab === "clients" ? (
+        {tab === "clients" && (
           <div className="mt-4 flex flex-col gap-6">
             {leads.length === 0 && !loadError && (
               <p className="text-sm text-black">No clients found.</p>
@@ -257,7 +333,7 @@ export default async function AdminDashboard({ searchParams }) {
                         </span>
                       </p>
                       <p className="text-sm text-black">
-                        {lead.phone} &middot; {lead.zip}
+                        {lead.phone} &middot; {lead.address}
                       </p>
                       <p className="text-xs text-black">
                         Submitted{" "}
@@ -275,7 +351,7 @@ export default async function AdminDashboard({ searchParams }) {
                         defaultValue={lead.status}
                         className="rounded-md border border-zinc-300 px-2 py-1 text-sm text-black"
                       >
-                        {STATUSES.map((status) => (
+                        {LEAD_STATUSES.map((status) => (
                           <option key={status} value={status}>
                             {status}
                           </option>
@@ -351,20 +427,24 @@ export default async function AdminDashboard({ searchParams }) {
               );
             })}
           </div>
-        ) : (
+        )}
+
+        {tab === "landscapers" && (
           <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
             {landscapers.length === 0 && !loadError ? (
               <p className="p-5 text-sm text-black">No landscapers found.</p>
             ) : (
-              <table className="w-full min-w-[600px] text-sm text-black">
+              <table className="w-full min-w-[700px] text-sm text-black">
                 <thead>
                   <tr className="border-b border-zinc-200 text-left text-black">
                     <th className="px-4 py-2">Business</th>
                     <th className="px-4 py-2">Phone</th>
                     <th className="px-4 py-2">Email</th>
-                    <th className="px-4 py-2">Zip</th>
+                    <th className="px-4 py-2">Address</th>
                     <th className="px-4 py-2">Radius</th>
+                    <th className="px-4 py-2">Contact Hours</th>
                     <th className="px-4 py-2">Services</th>
+                    <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -383,13 +463,199 @@ export default async function AdminDashboard({ searchParams }) {
                       <td className="px-4 py-2">
                         {landscaper.email ?? "—"}
                       </td>
-                      <td className="px-4 py-2">{landscaper.zip}</td>
+                      <td className="px-4 py-2">{landscaper.address}</td>
                       <td className="px-4 py-2">
                         {landscaper.service_radius_miles} mi
                       </td>
+                      <td className="px-4 py-2">
+                        {landscaper.contact_hours ?? "—"}
+                      </td>
                       <td className="px-4 py-2">{landscaper.services}</td>
+                      <td className="px-4 py-2">
+                        <LogInAsButton
+                          targetId={landscaper.id}
+                          role="landscaper"
+                        />
+                      </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "accounts" && (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+            {clientAccounts.length === 0 && !loadError ? (
+              <p className="p-5 text-sm text-black">
+                No client accounts found.
+              </p>
+            ) : (
+              <table className="w-full min-w-[500px] text-sm text-black">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-black">
+                    <th className="px-4 py-2">Name</th>
+                    <th className="px-4 py-2">Phone</th>
+                    <th className="px-4 py-2">Address</th>
+                    <th className="px-4 py-2">Signed Up</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientAccounts.map((client) => (
+                    <tr
+                      key={client.id}
+                      className="border-b border-zinc-100 last:border-0"
+                    >
+                      <td className="px-4 py-2">{client.name}</td>
+                      <td className="px-4 py-2">{client.phone}</td>
+                      <td className="px-4 py-2">{client.address}</td>
+                      <td className="px-4 py-2">
+                        {new Date(client.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-2">
+                        <LogInAsButton targetId={client.id} role="client" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "requests" && (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+            {requests.length === 0 && !loadError ? (
+              <p className="p-5 text-sm text-black">No requests found.</p>
+            ) : (
+              <table className="w-full min-w-[650px] text-sm text-black">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-black">
+                    <th className="px-4 py-2">Client</th>
+                    <th className="px-4 py-2">Landscaper</th>
+                    <th className="px-4 py-2">Service</th>
+                    <th className="px-4 py-2">Message</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Requested</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((req) => (
+                    <tr
+                      key={req.id}
+                      className="border-b border-zinc-100 last:border-0"
+                    >
+                      <td className="px-4 py-2">
+                        {req.client_profiles?.name}
+                        <div className="text-xs text-black">
+                          {req.client_profiles?.phone} &middot;{" "}
+                          {req.client_profiles?.address}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        {req.landscapers?.business_name}
+                        <div className="text-xs text-black">
+                          {req.landscapers?.phone}
+                          {req.landscapers?.contact_hours
+                            ? ` · ${req.landscapers.contact_hours}`
+                            : ""}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">{req.service}</td>
+                      <td className="px-4 py-2">{req.message ?? "—"}</td>
+                      <td className="px-4 py-2">
+                        <form
+                          action={updateRequestStatus}
+                          className="flex items-center gap-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="request_id"
+                            value={req.id}
+                          />
+                          <select
+                            name="status"
+                            defaultValue={req.status}
+                            className="rounded-md border border-zinc-300 px-2 py-1 text-sm text-black"
+                          >
+                            {REQUEST_STATUSES.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="submit"
+                            className="rounded-md bg-zinc-900 px-2 py-1 text-xs font-medium text-white hover:bg-zinc-700"
+                          >
+                            Update
+                          </button>
+                        </form>
+                      </td>
+                      <td className="px-4 py-2">
+                        {new Date(req.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "purchases" && (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+            {purchases.length === 0 && !loadError ? (
+              <p className="p-5 text-sm text-black">No purchases yet.</p>
+            ) : (
+              <table className="w-full min-w-[650px] text-sm text-black">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-black">
+                    <th className="px-4 py-2">Landscaper</th>
+                    <th className="px-4 py-2">Source</th>
+                    <th className="px-4 py-2">Client / Lead</th>
+                    <th className="px-4 py-2">Service</th>
+                    <th className="px-4 py-2">Price</th>
+                    <th className="px-4 py-2">Purchased</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.map((purchase) => {
+                    const source = purchase.leads ?? purchase.client_profiles;
+                    return (
+                      <tr
+                        key={purchase.id}
+                        className="border-b border-zinc-100 last:border-0"
+                      >
+                        <td className="px-4 py-2">
+                          {purchase.landscapers?.business_name}
+                          <div className="text-xs text-black">
+                            {purchase.landscapers?.phone}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 capitalize">
+                          {purchase.lead_id ? "Lead" : "Client Account"}
+                        </td>
+                        <td className="px-4 py-2">
+                          {source?.name}
+                          <div className="text-xs text-black">
+                            {source?.phone} &middot; {source?.address}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          {purchase.leads?.service ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 font-medium text-green-700">
+                          ${Number(purchase.price).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2">
+                          {new Date(purchase.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

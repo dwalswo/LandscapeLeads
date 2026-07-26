@@ -1,5 +1,6 @@
 import { submitLead } from "@/app/actions";
 import { SERVICES } from "@/app/lib/services";
+import PhoneInput from "@/app/components/PhoneInput";
 
 const ERROR_MESSAGES = {
   missing_fields: "Please fill in all required fields.",
@@ -52,25 +53,24 @@ export default async function Home({ searchParams }) {
             <label htmlFor="phone" className="text-sm font-medium text-zinc-900">
               Phone Number
             </label>
-            <input
+            <PhoneInput
               id="phone"
               name="phone"
-              type="tel"
               required
               className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-green-600 focus:outline-none"
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="zip" className="text-sm font-medium text-zinc-900">
-              Zip Code / Address
+            <label htmlFor="address" className="text-sm font-medium text-zinc-900">
+              Address
             </label>
             <input
-              id="zip"
-              name="zip"
+              id="address"
+              name="address"
               type="text"
               required
-              placeholder="e.g. 78660"
+              placeholder="e.g. 123 Main St, Pflugerville, TX 78660"
               className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 placeholder:text-zinc-700 focus:border-green-600 focus:outline-none"
             />
             <p className="text-xs text-zinc-900">

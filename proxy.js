@@ -31,23 +31,49 @@ export async function proxy(request) {
   const isLoggedIn = Boolean(data?.claims)
 
   const { pathname } = request.nextUrl
-  const isLoginRoute = pathname === '/admin/login'
 
-  if (pathname.startsWith('/admin') && !isLoginRoute && !isLoggedIn) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin/login'
-    return NextResponse.redirect(url)
-  }
+  const areas = [
+    { prefix: '/admin', loginPath: '/admin/login', publicPaths: ['/admin/login'] },
+    {
+      prefix: '/account',
+      loginPath: '/account/login',
+      publicPaths: ['/account/login', '/account/signup'],
+    },
+    {
+      // NOTE: prefix is singular ("/landscaper") -- the existing public,
+      // login-free signup page is plural ("/landscapers"). Matching must
+      // not treat "/landscapers" as falling under this prefix.
+      prefix: '/landscaper',
+      loginPath: '/landscaper/login',
+      publicPaths: ['/landscaper/login', '/landscaper/signup'],
+    },
+  ]
 
-  if (isLoginRoute && isLoggedIn) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin'
-    return NextResponse.redirect(url)
+  for (const area of areas) {
+    const inArea =
+      pathname === area.prefix || pathname.startsWith(`${area.prefix}/`)
+    if (!inArea) continue
+
+    const isPublicPath = area.publicPaths.includes(pathname)
+
+    if (!isPublicPath && !isLoggedIn) {
+      const url = request.nextUrl.clone()
+      url.pathname = area.loginPath
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname === area.loginPath && isLoggedIn) {
+      const url = request.nextUrl.clone()
+      url.pathname = area.prefix
+      return NextResponse.redirect(url)
+    }
+
+    break
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/account/:path*'],
 }

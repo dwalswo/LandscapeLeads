@@ -30,6 +30,85 @@ NOT building the full marketplace yet. Building a lean single-city test first:
 5. Only after the manual loop is proven: build automated matching,
    landscaper dashboards/profiles, and self-serve billing.
 
+## Deviation: client accounts shipped ahead of schedule
+Per explicit request, clients now have self-serve accounts (Supabase Auth,
+email+password) and a dashboard at `/account`:
+- Browse landscapers near their zip (same haversine distance logic as the
+  admin matching view), see each landscaper's stated contact hours.
+- Submit a "service request" to a specific landscaper (`service_requests`
+  table) — this is separate from the anonymous `leads` table, which is
+  kept as-is for people who don't want to create an account.
+- Requests show up in the admin dashboard's "Requests" tab for manual
+  follow-up (call/text), same low-tech loop as leads. Optional automatic
+  email to the landscaper via Resend if `RESEND_API_KEY` /
+  `RESEND_FROM_EMAIL` are set (`lib/notify.js`); silently no-ops if unset
+  or if the landscaper has no email on file.
+- Landscapers can now optionally create a login too (`/landscaper`),
+  separate from the original no-login public signup form at `/landscapers`
+  which is unchanged and still the low-friction path for cold outreach.
+  `/landscaper/signup` → `/landscaper/complete-profile` (same fields as
+  the public form: business info, zip, radius, contact hours, services)
+  creates a `landscapers` row with `id = auth.uid()`, mirroring how
+  `client_profiles.id = auth.uid()` works. The dashboard at `/landscaper`
+  shows client requests sent to them (`service_requests` where
+  `landscaper_id = auth.uid()`) with a status dropdown, and an "Edit
+  Profile" link back to the same complete-profile form (upsert, so one
+  form/action serves both onboarding and later edits).
+  Known gap: landscapers who signed up anonymously via the old public
+  form have no way to "claim" that existing listing with a new login —
+  only brand-new dashboard signups get a linked `landscapers` row. Not
+  built (needs a real identity-matching design), flagged here for later.
+  Proxy gotcha handled: `/landscaper` (singular, the new authed area) and
+  `/landscapers` (plural, the existing public page) look alike —
+  `pathname.startsWith('/landscaper')` would wrongly match `/landscapers`
+  too, so `proxy.js` checks `=== prefix || startsWith(prefix + '/')`
+  instead.
+- Phone verification: after completing their profile, clients are prompted
+  (skippable, not enforced) to verify their phone via a 6-digit SMS code
+  (`/account/verify-phone`, `sendPhoneVerification`/`verifyPhoneCode` in
+  `app/account/actions.js`, using Supabase Auth's native phone OTP —
+  `auth.updateUser({ phone })` + `verifyOtp({ type: 'phone_change' })`).
+  This does nothing until a SMS provider (Twilio) is configured in the
+  Supabase dashboard under Authentication > Providers > Phone — until
+  then it fails gracefully with a "not set up yet" message. Confirmed via
+  logs: fails with `missing Twilio account SID`, not a bug on our end.
+  Deliberately not wired up yet (cost + setup deferred per explicit
+  request) — no code changes needed once Twilio is added, just Supabase
+  dashboard config.
+
+Security note: introducing client self-signup meant "authenticated" in
+Postgres RLS no longer safely means "the admin" (clients are authenticated
+too). Added `public.admins` (RLS locked down, no policies — only read via
+the `security definer` `is_admin()` function) and rewrote the leads
+select/update policies to check `is_admin()` instead of blanket
+`to authenticated`. Landscapers stays broadly readable to any
+authenticated user on purpose (clients need to browse it).
+
+Known constraint: Supabase's free-tier default auth email sending is
+rate-limited (hit `429 over_email_send_rate_limit` after ~3 signups in
+quick succession while testing). Real client signups needing email
+confirmation could hit this under any signup burst. Fix later by adding
+custom SMTP (Resend can serve this too) in Supabase Auth settings.
+
+## Nav redesign + staging vs. production visibility
+Header nav (`app/components/RoleNav.js`, a client component) replaced the
+old four static links (Get a Quote / For Landscapers / Client Login /
+Landscaper Login) with: a "You are a: Client|Landscaper" toggle switch,
+then just "Login" and "Dashboard" — both links retarget to
+`/account/*` or `/landscaper/*` based on the toggle (in-memory React
+state, resets on hard refresh, persists across client-side nav). Per
+explicit request, "For Landscapers" (the anonymous public signup page)
+no longer has a nav link in either environment — the route still works,
+just isn't linked from nav. Same for the client quote page in production
+(see below). Neither page was removed, only unlinked.
+
+New env var `NEXT_PUBLIC_APP_ENV` ("staging" in `.env.local`,
+"production" in `.env.production.local`) controls one thing: whether the
+"Get a Quote" nav link shows. In production it's hidden — the `/` quote
+page itself is fully functional and un-gated, meant to be reached only
+via direct ad links, not site navigation. Verified by building with each
+env file and diffing the rendered nav.
+
 ## Go-to-market plan
 - Launch city/zip: Pflugerville, TX (78660).
 - One city, one zip code at a time.

@@ -1,5 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import RoleNav from "./components/RoleNav";
+import { supabase } from "@/lib/supabaseClient";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +20,15 @@ export const metadata = {
     "Get matched with a local landscaper in Pflugerville, TX for free, or sign up as a landscaper to receive leads in the area.",
 };
 
-export default function RootLayout({ children }) {
+// Keeps the "Now serving..." client/company counts in the header from
+// getting frozen at build time -- refetched at most once a minute.
+export const revalidate = 60;
+
+export default async function RootLayout({ children }) {
+  const { data: stats } = await supabase.rpc("get_platform_stats").maybeSingle();
+  const clientCount = stats?.client_count ?? 0;
+  const landscaperCount = stats?.company_count ?? 0;
+
   return (
     <html
       lang="en"
@@ -30,14 +40,11 @@ export default function RootLayout({ children }) {
             <Link href="/" className="text-lg font-bold text-green-700">
               LandscapeLeads
             </Link>
-            <nav className="flex items-center gap-6 text-sm font-medium">
-              <Link href="/" className="hover:text-green-700">
-                Get a Quote
-              </Link>
-              <Link href="/landscapers" className="hover:text-green-700">
-                For Landscapers
-              </Link>
-            </nav>
+            <RoleNav />
+          </div>
+          <div className="border-t border-zinc-100 bg-zinc-50 py-1.5 text-center text-xs text-black">
+            Now serving {clientCount} client{clientCount === 1 ? "" : "s"} and{" "}
+            {landscaperCount} landscaper{landscaperCount === 1 ? "" : "s"}
           </div>
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
